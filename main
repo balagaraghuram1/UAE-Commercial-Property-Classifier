@@ -1,340 +1,115 @@
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 """
-==============================================================================
-BreadcrumbsUAE-Commercial-Property-Classifier: Main Orchestrator Script
-==============================================================================
-This script acts as a top-level entry point to manage different aspects of
-the commercial property classification pipeline, including:
+===============================================================================
+UAE Commercial Property Classifier: Main Orchestrator Script
+===============================================================================
+This script provides a command-line interface (CLI) to manage the pipeline for:
 
-    (1) Training an image-based classifier (CNN or other) that identifies 
-        commercial real estate types (offices, retail, warehouses, etc.)
-    (2) Training a text-based classifier (NLP approach) that classifies 
-        property descriptions into categories
-    (3) Predicting property type from either an image file or text snippet
-    (4) Optional hyperparameter tuning steps
-    (5) Logging, debugging modes, and error-handling
+1. Data Preprocessing:
+    - Cleans, tokenizes, and prepares commercial property datasets.
 
-Usage Examples:
-    python main.py train-img --epochs 20 --batch-size 16
-    python main.py train-txt --tune
-    python main.py predict-img --image data/images/warehouse_101.jpg
-    python main.py predict-txt --description "Spacious office in Dubai Marina"
-    python main.py train-img --epochs 10 --gpu --verbose
+2. Model Training:
+    - Trains a property classification model (e.g., Logistic Regression, Random Forest, BERT).
+    - Saves the trained model for inference.
 
-Project Folder Assumptions:
-    BreadcrumbsUAE-Commercial-Property-Classifier/
+3. Inference:
+    - Performs property classification on new data.
+
+4. Evaluation:
+    - Computes metrics like accuracy, precision, recall, and F1-score.
+
+Example Commands:
+    python main.py preprocess --input data/raw/property_data.csv --output data/processed/cleaned_data.csv
+    python main.py train --model logistic_regression
+    python main.py inference --model_path models/property_classifier.pkl --input_path data/processed/cleaned_data.csv --output_path data/results/classification_results.csv
+    python main.py evaluate --model_path models/property_classifier.pkl --metrics accuracy precision recall f1
+
+Repository Structure Assumption:
+    UAE-Commercial-Property-Classifier/
     ├── data/
-    │    ├── images/
-    │    └── metadata.csv
     ├── models/
-    │    ├── cnn_classifier.h5
-    │    └── text_classifier.pkl
+    ├── notebooks/
     ├── src/
-    │    ├── image_classifier.py
-    │    ├── text_classifier.py
-    │    ├── data_preprocessing.py
-    │    └── utils.py
     ├── tests/
     ├── docs/
     ├── animations/
     ├── .gitignore
     ├── LICENSE
     ├── README.md
-    └── requirements.txt
+    ├── requirements.txt
+    └── main.py
 
 Author: Your Name
-Date: YYYY-MM-DD
-Contact: your.email@example.com
-License: MIT (or other chosen license)
-==============================================================================
+License: Research 247 UAE
+===============================================================================
 """
 
 import argparse
 import logging
-import os
-import sys
-import time
+from src.preprocess import preprocess_property_data
+from src.train import train_property_classifier
+from src.inference import classify_properties
+from src.evaluate import evaluate_classifier
 
-# Hypothetical imports from local modules (adjust paths/functions as necessary)
-# from src.data_preprocessing import preprocess_images, preprocess_text_data
-from src.image_classifier import (
-    train_image_model,  # function to train an image CNN
-    predict_image       # function to run inference on a single image
-)
-from src.text_classifier import (
-    train_text_model,   # function to train an NLP classifier
-    predict_text        # function to run inference on text snippet
-)
-
-###############################################################################
-# Setup Logging
-###############################################################################
-
-# Optional: If you want a rotating file handler or advanced logging, expand here.
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
-
-###############################################################################
-# Argparse and Main Orchestration
-###############################################################################
 
 def main():
     """
-    Main entry point for the BreadcrumbsUAE-Commercial-Property-Classifier
-    pipeline. Supports subcommands for training and prediction across both
-    image and text classification models, with optional hyperparameter tuning
-    and GPU usage flags.
+    Main CLI for the UAE Commercial Property Classifier pipeline.
     """
-
     parser = argparse.ArgumentParser(
-        prog="BreadcrumbsUAE-Commercial-Property-Classifier",
-        description="Manages training and prediction for the UAE commercial "
-                    "property classification project."
+        prog="UAE-Commercial-Property-Classifier",
+        description="CLI for data preprocessing, training, inference, and evaluation."
     )
 
-    # We use subparsers to separate image-based tasks from text-based tasks
     subparsers = parser.add_subparsers(
-        title="Subcommands",
-        description="Valid subcommands for training or predicting with image/text models",
-        dest="subcommand",
+        title="Commands",
+        description="Available tasks",
+        dest="command",
         required=True
     )
 
-    #------------------------------------------------------------------------
-    # Subcommand: train-img
-    #------------------------------------------------------------------------
-    parser_train_img = subparsers.add_parser(
-        "train-img",
-        help="Train the image-based property classification model"
-    )
-    parser_train_img.add_argument(
-        "--epochs",
-        type=int,
-        default=10,
-        help="Number of epochs for training the CNN image model"
-    )
-    parser_train_img.add_argument(
-        "--batch-size",
-        type=int,
-        default=32,
-        help="Batch size for the image training process"
-    )
-    parser_train_img.add_argument(
-        "--tune",
-        action="store_true",
-        help="If set, runs a hyperparameter tuning routine for the image model"
-    )
-    parser_train_img.add_argument(
-        "--gpu",
-        action="store_true",
-        help="Flag indicating if GPU usage is preferred (depends on your environment)"
-    )
-    parser_train_img.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging for debugging"
-    )
+    # Preprocessing subcommand
+    preprocess_parser = subparsers.add_parser("preprocess", help="Preprocess property data.")
+    preprocess_parser.add_argument("--input", required=True, help="Path to raw input file.")
+    preprocess_parser.add_argument("--output", required=True, help="Path to save cleaned output file.")
 
-    #------------------------------------------------------------------------
-    # Subcommand: train-txt
-    #------------------------------------------------------------------------
-    parser_train_txt = subparsers.add_parser(
-        "train-txt",
-        help="Train the text-based property classification model"
-    )
-    parser_train_txt.add_argument(
-        "--tune",
-        action="store_true",
-        help="If set, runs a hyperparameter tuning routine for the text model"
-    )
-    parser_train_txt.add_argument(
-        "--gpu",
-        action="store_true",
-        help="Flag indicating if GPU usage is relevant for text-based training (e.g., large transformers)"
-    )
-    parser_train_txt.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging for debugging"
-    )
+    # Training subcommand
+    train_parser = subparsers.add_parser("train", help="Train a property classification model.")
+    train_parser.add_argument("--model", choices=["logistic_regression", "random_forest", "bert"], required=True, help="Model type to train.")
 
-    #------------------------------------------------------------------------
-    # Subcommand: predict-img
-    #------------------------------------------------------------------------
-    parser_predict_img = subparsers.add_parser(
-        "predict-img",
-        help="Predict the property type for a given image"
-    )
-    parser_predict_img.add_argument(
-        "--image",
-        type=str,
-        required=True,
-        help="Path to the image file to classify"
-    )
-    parser_predict_img.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging for debugging"
-    )
+    # Inference subcommand
+    inference_parser = subparsers.add_parser("inference", help="Classify new properties.")
+    inference_parser.add_argument("--model_path", required=True, help="Path to the trained model file.")
+    inference_parser.add_argument("--input_path", required=True, help="Path to the input data file.")
+    inference_parser.add_argument("--output_path", required=True, help="Path to save classification results.")
 
-    #------------------------------------------------------------------------
-    # Subcommand: predict-txt
-    #------------------------------------------------------------------------
-    parser_predict_txt = subparsers.add_parser(
-        "predict-txt",
-        help="Predict the property type from a text description"
-    )
-    parser_predict_txt.add_argument(
-        "--description",
-        type=str,
-        required=True,
-        help="String describing the commercial property"
-    )
-    parser_predict_txt.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging for debugging"
-    )
+    # Evaluation subcommand
+    evaluate_parser = subparsers.add_parser("evaluate", help="Evaluate the trained model.")
+    evaluate_parser.add_argument("--model_path", required=True, help="Path to the trained model file.")
+    evaluate_parser.add_argument("--metrics", nargs="+", choices=["accuracy", "precision", "recall", "f1"], required=True, help="Metrics to compute.")
 
-    # Parse the arguments
+    # Parse arguments
     args = parser.parse_args()
 
-    # Start time for optional performance measurement
-    start_time = time.time()
-
-    # Handle verbosity
-    if args.subcommand is not None and getattr(args, "verbose", False):
-        logging.getLogger().setLevel(logging.DEBUG)
-        logging.debug("Verbose mode enabled. Showing debug-level logs.")
-
-    #========================================================================
-    # Subcommand Logic
-    #========================================================================
-    if args.subcommand == "train-img":
-        handle_train_img(args)
-
-    elif args.subcommand == "train-txt":
-        handle_train_txt(args)
-
-    elif args.subcommand == "predict-img":
-        handle_predict_img(args)
-
-    elif args.subcommand == "predict-txt":
-        handle_predict_txt(args)
-
+    # Dispatch commands
+    if args.command == "preprocess":
+        preprocess_property_data(args.input, args.output)
+    elif args.command == "train":
+        train_property_classifier(args.model)
+    elif args.command == "inference":
+        classify_properties(args.model_path, args.input_path, args.output_path)
+    elif args.command == "evaluate":
+        evaluate_classifier(args.model_path, args.metrics)
     else:
-        logging.error(f"Unknown subcommand: {args.subcommand}")
+        logging.error("Unknown command.")
         parser.print_help()
-        sys.exit(1)
 
-    # Performance measurement
-    elapsed = time.time() - start_time
-    logging.info(f"Total execution time: {elapsed:.2f} seconds")
-
-
-###############################################################################
-# Subcommand Handlers
-###############################################################################
-
-def handle_train_img(args):
-    """
-    Handler for the 'train-img' subcommand. This typically includes:
-    1) Data loading / preprocessing of images
-    2) Possibly hyperparam tuning if --tune is set
-    3) Training the CNN model with the specified number of epochs & batch size
-    4) Saving the trained model to models/cnn_classifier.h5
-    """
-    logging.info("Starting image-based model training...")
-    logging.info(f"Parameters: epochs={args.epochs}, batch_size={args.batch_size}, tune={args.tune}, gpu={args.gpu}")
-
-    # Example usage of GPU flag
-    if args.gpu:
-        logging.info("GPU usage requested (assuming environment supports it).")
-
-    # Potentially call your data preprocessing function
-    # preprocess_images()  # (uncomment if defined in your code)
-
-    # If hyperparameter tuning is requested
-    if args.tune:
-        logging.info("Running hyperparameter tuning for image classifier...")
-        # Insert your custom grid search or auto ML logic here
-        # tune_image_classifier() # (placeholder function)
-
-    # Actually train the model
-    train_image_model(epochs=args.epochs, batch_size=args.batch_size, use_gpu=args.gpu)
-
-    logging.info("Image-based model training complete. Model saved in ./models/.")
-
-
-def handle_train_txt(args):
-    """
-    Handler for the 'train-txt' subcommand. Typically includes:
-    1) Loading and cleaning text data from data/metadata.csv
-    2) Possibly hyperparam tuning if --tune is set
-    3) Training text classification model (e.g., scikit-learn or transformers)
-    4) Saving the trained model to models/text_classifier.pkl
-    """
-    logging.info("Starting text-based model training...")
-    logging.info(f"Parameters: tune={args.tune}, gpu={args.gpu}")
-
-    if args.gpu:
-        logging.info("GPU usage requested for text training (useful for large-scale NLP).")
-
-    # preprocess_text_data()  # (uncomment if you have a text preprocessing function)
-
-    if args.tune:
-        logging.info("Running hyperparameter tuning for text classifier...")
-        # Insert your custom grid search or auto ML logic for text
-        # tune_text_classifier()
-
-    train_text_model(use_gpu=args.gpu)
-    logging.info("Text-based model training complete. Model saved in ./models/.")
-
-
-def handle_predict_img(args):
-    """
-    Handler for the 'predict-img' subcommand. This typically includes:
-    1) Checking if the specified image path exists
-    2) Loading the trained CNN model
-    3) Performing inference
-    4) Printing or returning the predicted property type
-    """
-    image_path = args.image
-    if not os.path.exists(image_path):
-        logging.error(f"Image file does not exist: {image_path}")
-        sys.exit(1)
-
-    logging.info(f"Loading image from: {image_path}")
-    prediction = predict_image(image_path)
-    logging.info(f"Predicted property type: {prediction}")
-    print(f"\n[RESULT] The image is classified as: {prediction}")
-
-
-def handle_predict_txt(args):
-    """
-    Handler for the 'predict-txt' subcommand. Typically includes:
-    1) Receiving a text description from command line
-    2) Loading the trained text model
-    3) Performing inference on the text
-    4) Outputting the predicted property category
-    """
-    description = args.description.strip()
-    if not description:
-        logging.error("Text description is empty. Cannot proceed.")
-        sys.exit(1)
-
-    logging.info(f"Running text-based inference on description: {description}")
-    prediction = predict_text(description)
-    logging.info(f"Predicted property type: {prediction}")
-    print(f"\n[RESULT] The text description is classified as: {prediction}")
-
-
-###############################################################################
-# Main Guard
-###############################################################################
 
 if __name__ == "__main__":
     main()
