@@ -308,3 +308,5 @@ Distributed under the **MIT License**.  See [LICENSE](LICENSE) for details.
 ## Author
 
 **balaga raghuram** — built for the UAE real-estate analytics community.
+
+<!-- Badge unlock -->
